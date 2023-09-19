@@ -9,6 +9,7 @@ const char *ssid = "nome_da_red";
 const char *password = "Senha_da_rede";
 
 int LED_BUILTIN = 23;
+int releVentoinha = 12;
 
 int analogInputTensao = 35;
 int analogInputTemperatura = 33; // Conexão do termistor
@@ -16,10 +17,6 @@ int analogInputTensaoPainel = 39;
 int analogInputTensaoBateria = 36;
 int analogInputCorrentePainel = 32;
 int analogInputTensaoBatLition = 34;
-
-int releVentoinha = 12;
-
-
 
 // Parâmetros do circuito
 const double vcc = 4.6;
@@ -29,8 +26,6 @@ const double bateriaGrandeFlut = 14.4;
 const double batLitio = 14.4;
 
 char valorEntrada; 
-// Numero de amostras na leitura
-const int nAmostras = 5.2;
 
 //File myFile;
 
@@ -359,17 +354,29 @@ double Calcula_corrente()
 
 float Calcula_Tensao(int valor)
 {
-    float vout = 0.0;
-    float vin = 0.0;
-    float R1 = 100000.0; // resistência de R1 (100K)
-    float R2 = 10000.0; // resistência de R2 (10K) 
-    float ValorRetorno = 0;  
-    vout = (valor * vcc) / 1024.0; // see text
-    ValorRetorno = vout / (R2/(R1+R2)); 
-    if (ValorRetorno<0.09) {
-        ValorRetorno=0.0;// declaração para anular a leitura indesejada!
+    const float vcc = 4.62; // Tensão de referência da ESP32 em Volts
+    const int resolucaoADC = 4096; // Resolução do ADC (12 bits)
+    const float R1 = 100000.0; // Resistência R1 em ohms (100K)
+    const float R2 = 10000.0; // Resistência R2 em ohms (10K)
+    int leituraAnalogica = analogRead(valor);
+    float vout = (leituraAnalogica / (float)resolucaoADC) * vcc;
+    float valorTensao = vout / (R2 / (R1 + R2));
+    
+    // Verifica se a tensão é menor que 0.09V (90mV) e ajusta para zero se for.
+    if (valorTensao < 0.09) {
+      valorTensao = 0.0;
     }
-    return ValorRetorno;
+    
+    float tensaoEntrada = valorTensao;
+
+    Serial.print("Leitura ADC: ");
+    Serial.print(leituraAnalogica);
+    Serial.print(", Tensao de Entrada: ");
+    Serial.print(tensaoEntrada);
+    Serial.println(" V");
+
+    delay(1000);
+    return valorTensao;
 }
 
 float Calcula_Temperatura()
@@ -378,6 +385,7 @@ float Calcula_Temperatura()
     const double beta = 3600.0;
     const double r0 = 10000.0;
     const double t0 = 273.0 + 25.0;
+    const int nAmostras = 5.2;
     const double rx = r0 * exp(-beta / t0);
     int  soma = 0;
     for (int i = 0; i < nAmostras; i++)
