@@ -229,7 +229,7 @@ void setup(){
   pinMode(analogInputCorrentePainel,INPUT);
   pinMode(analogInputTensaoBatLition,INPUT);
   
-  if(!SD.begin(5)){
+  /*if(!SD.begin(5)){
     Serial.println("Card Mount Failed");
     return;
   }
@@ -267,7 +267,7 @@ void setup(){
   testFileIO(SD, "/test.txt");
   Serial.printf("Total space: %lluMB\n", SD.totalBytes() / (1024 * 1024));
   Serial.printf("Used space: %lluMB\n", SD.usedBytes() / (1024 * 1024));
- 
+ */
 }
 
 void loop(){
@@ -316,7 +316,7 @@ void loop(){
     Serial.println(Calcula_Tensao(analogRead(analogInputTensaoBateria)));
     Serial.println(Calcula_Tensao(analogRead(analogInputTensaoPainel)));
     Serial.println(Calcula_Tensao(analogRead(analogInputTensaoBatLition)));
-    delay(10000); 
+    delay(1000); 
     /*char *a = (char *)Calcula_Tensao(analogRead(analogInputTensaoBateria));
     char *b = (char *)Calcula_Tensao(analogRead(analogInputTensaoPainel));
     char *c = (char *)Calcula_Tensao(analogRead(analogInputTensaoBatLition));
@@ -352,30 +352,24 @@ double Calcula_corrente()
     return Amps;
 }
 
-float Calcula_Tensao(int valor)
+float Calcula_Tensao(int leituraAnalogica)
 {
-    const float vcc = 4.62; // Tensão de referência da ESP32 em Volts
+    const float vcc = 3.30; // Tensão de referência da ESP32 em Volts
     const int resolucaoADC = 4096; // Resolução do ADC (12 bits)
     const float R1 = 100000.0; // Resistência R1 em ohms (100K)
     const float R2 = 10000.0; // Resistência R2 em ohms (10K)
-    int leituraAnalogica = analogRead(valor);
-    float vout = (leituraAnalogica / (float)resolucaoADC) * vcc;
+    float vout = ((leituraAnalogica+117) / (float)resolucaoADC) * vcc;
     float valorTensao = vout / (R2 / (R1 + R2));
+    valorTensao += 0.42;
     
-    // Verifica se a tensão é menor que 0.09V (90mV) e ajusta para zero se for.
-    if (valorTensao < 0.09) {
+    if (leituraAnalogica == 0) {
       valorTensao = 0.0;
     }
-    
-    float tensaoEntrada = valorTensao;
-
-    Serial.print("Leitura ADC: ");
+    Serial.print("Leitura Tensao ADC: ");
     Serial.print(leituraAnalogica);
     Serial.print(", Tensao de Entrada: ");
-    Serial.print(tensaoEntrada);
+    Serial.print(valorTensao);
     Serial.println(" V");
-
-    delay(1000);
     return valorTensao;
 }
 
@@ -404,34 +398,23 @@ float Calcula_Temperatura()
 }
 
 void calcularCorrenteEsp32(int pino_sensor){
-int menor_valor;
-int valor_lido;
-int menor_valor_acumulado = 0;
-int ZERO_SENSOR = 0;
-float corrente_pico;
-float corrente_eficaz;
-double maior_valor=0;
-double corrente_valor=0;
- /*
- ZERO_SENSOR = analogRead(pino_sensor); 
- for(int i = 0; i < 10000 ; i++){
- valor_lido = analogRead(pino_sensor); 
- ZERO_SENSOR = (ZERO_SENSOR +  valor_lido)/2; 
- delayMicroseconds(1);  
- }
- Serial.print("Zero do Sensor:");
- Serial.println(ZERO_SENSOR);
- delay(3000);
-
- */
-menor_valor = 4095;
- 
+  int menor_valor;
+  int valor_lido;
+  int menor_valor_acumulado = 0;
+  int ZERO_SENSOR = 0;
+  float corrente_pico;
+  float corrente_eficaz;
+  double maior_valor=0;
+  double corrente_valor=0;
+  
+  menor_valor = 4095;
+  
   for(int i = 0; i < 10000 ; i++){
-  valor_lido = analogRead(pino_sensor);
-  if(valor_lido < menor_valor){
-  menor_valor = valor_lido;    
-  }
-  delayMicroseconds(1);  
+    valor_lido = analogRead(pino_sensor);
+    if(valor_lido < menor_valor){
+      menor_valor = valor_lido;    
+    }
+    delayMicroseconds(1);  
   }
   ZERO_SENSOR = menor_valor;
   Serial.print("Zero do Sensor:");
@@ -442,13 +425,12 @@ menor_valor = 4095;
   menor_valor = 4095;
  
   for(int i = 0; i < 1600 ; i++){
-  valor_lido = analogRead(pino_sensor);
-  if(valor_lido < menor_valor){
-  menor_valor = valor_lido;    
+    valor_lido = analogRead(pino_sensor);
+    if(valor_lido < menor_valor){
+      menor_valor = valor_lido;    
+    }
+    delayMicroseconds(10);  
   }
-  delayMicroseconds(10);  
-  }
-
   
   Serial.print("Menor Valor:");
   Serial.println(menor_valor);
@@ -475,6 +457,5 @@ menor_valor = 4095;
   Serial.print(" --- ");
   Serial.print(corrente_eficaz*1000);
   Serial.println(" mA");
- 
- delay(5000);
+
 }
