@@ -18,9 +18,7 @@ int analogInputTensaoBateria = 36;
 int analogInputCorrentePainel = 32;
 int analogInputTensaoBatLition = 34;
 
-// Parâmetros do circuito
-const double vcc = 4.6;
-const double R = 10000.0;
+
 
 const double bateriaGrandeFlut = 14.4;
 const double batLitio = 14.4;
@@ -309,15 +307,16 @@ void loop(){
     }
      **/
     Serial.print("Corrente::");
-    //Serial.println(Calcula_corrente());
     calcularCorrenteEsp32(analogInputCorrentePainel);
     Serial.println("Tensao::");
     Serial.println(Calcula_Tensao(analogRead(analogInputTensao)));
     Serial.println(Calcula_Tensao(analogRead(analogInputTensaoBateria)));
     Serial.println(Calcula_Tensao(analogRead(analogInputTensaoPainel)));
     Serial.println(Calcula_Tensao(analogRead(analogInputTensaoBatLition)));
+    Serial.println("Temperatura::");
+    Serial.println(Calcula_Temperatura(analogInputTemperatura));
     delay(1000); 
-    /*char *a = (char *)Calcula_Tensao(analogRead(analogInputTensaoBateria));
+    char InputTensaoBateria[] = (char *)Calcula_Tensao(analogRead(analogInputTensaoBateria));
     char *b = (char *)Calcula_Tensao(analogRead(analogInputTensaoPainel));
     char *c = (char *)Calcula_Tensao(analogRead(analogInputTensaoBatLition));
     char *d = (char *)Calcula_corrente(); 
@@ -337,21 +336,7 @@ void loop(){
     }    */
 }
 
-
-double Calcula_corrente()
-{
-    int mVperAmp = 100; 
-    int RawValue = 0;
-    int ACSoffset = 2500;
-    double Voltage = 0;
-    double Amps = 0;
-
-    RawValue = analogRead(analogInputCorrentePainel);
-    Voltage = (RawValue / 1024.0) * 4600; // Gets you mV
-    Amps = ((Voltage - ACSoffset) / mVperAmp);
-    return Amps;
-}
-
+//Testado
 float Calcula_Tensao(int leituraAnalogica)
 {
     const float vcc = 3.30; // Tensão de referência da ESP32 em Volts
@@ -365,17 +350,17 @@ float Calcula_Tensao(int leituraAnalogica)
     if (leituraAnalogica == 0) {
       valorTensao = 0.0;
     }
-    Serial.print("Leitura Tensao ADC: ");
-    Serial.print(leituraAnalogica);
-    Serial.print(", Tensao de Entrada: ");
-    Serial.print(valorTensao);
-    Serial.println(" V");
     return valorTensao;
 }
 
-float Calcula_Temperatura()
+//Testa
+float Calcula_Temperatura(int pino_input_temperatura)
 {
-    // Parâmetros do termistor
+    // Parâmetros do termistor    
+    const double vcc = 3.3;
+    const int resolucaoADC = 4096;
+    // Parâmetros do circuito
+    const double R = 10000.0;
     const double beta = 3600.0;
     const double r0 = 10000.0;
     const double t0 = 273.0 + 25.0;
@@ -388,7 +373,7 @@ float Calcula_Temperatura()
         delay(10);
     }
     // Determina a resistência do termistor
-    double v = (vcc * soma) / (nAmostras * 1024.0);
+    double v = (vcc * soma) / (nAmostras * resolucaoADC);
     double rt = (vcc * R) / v - R;
 
     // Calcula a temperatura
@@ -417,8 +402,7 @@ void calcularCorrenteEsp32(int pino_sensor){
     delayMicroseconds(1);  
   }
   ZERO_SENSOR = menor_valor;
-  Serial.print("Zero do Sensor:");
-  Serial.println(ZERO_SENSOR);
+  
   delay(3000);
 
   //Zerar valores
@@ -440,14 +424,6 @@ void calcularCorrenteEsp32(int pino_sensor){
   corrente_pico = corrente_pico*0.805; // A resolução mínima de leitura para o ESp32 é de 0.8 mV por divisão. Isso transforma a leitura analógica em valor de tensão em [mV}
   corrente_pico = corrente_pico/185;   // COnverter o valor de tensão para corrente de acordo com o modelo do sensor. No meu caso, esta sensibilidade vale 185mV/A
                                       // O modelo dele é ACS712-05B. Logo, precisamos dividir o valor encontrado por 185 para realizar esta conversão                                       
-  
-  Serial.print("Corrente de Pico:");
-  Serial.print(corrente_pico);
-  Serial.print(" A");
-  Serial.print(" --- ");
-  Serial.print(corrente_pico*1000);
-  Serial.println(" mA");
-  
  
   //Converter para corrente eficaz  
   corrente_eficaz = corrente_pico/1.4;
