@@ -3,13 +3,11 @@
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
-#include <NTPClient.h> 
-#include <stdio.h>
+#include "NTPClient.h" 
+#include <string.h>
 
 #define WORD_LENGTH 64
 
-const char *ssid = "nome_da_red";
-const char *password = "Senha_da_rede";
 
 int LED_BUILTIN = 23;
 int releVentoinha = 12;
@@ -18,22 +16,21 @@ int analogInputTensao = 35;
 int analogInputTemperatura = 33; // Conexão do termistor
 int analogInputTensaoPainel = 39;
 int analogInputTensaoBateria = 36;
-int analogInputCorrentePainel = 32;
 int analogInputTensaoBatLition = 34;
 
-
+int analogInputCorrentePainel = 32;
 
 const double bateriaGrandeFlut = 14.4;
 const double batLitio = 14.4;
 
-char valorEntrada; 
-
-//File myFile;
+bool wificonecte = false;
+bool arquivo_read = false;
 
 double Calcula_corrente();
 float Calcula_Tensao(int valor);
 float Calcula_Temperatura();
 float calcularCorrenteEsp32(int pino_sensor);
+float Calcula_Temperatura(int pino_input_temperatura);
 
 WiFiUDP ntpUDP;
 NTPClient ntp(ntpUDP);
@@ -48,6 +45,31 @@ bool ConectarWifi(){
     return true;
 }
 
+void appendFile(fs::FS &fs, String path, String message)
+{
+  File file = fs.open(path, FILE_APPEND);
+  if(!file)
+  {
+    return;
+  }
+  if(file.print(message)){
+    return;
+  } 
+  file.close();
+}
+
+void readFile(fs::FS &fs, String path)
+{
+  File file = fs.open(path);
+  if(!file){
+    return;
+  }
+  while(file.available()){
+    Serial.write(file.read());
+  }
+  file.close();
+}
+
 void setup(){
   Serial.begin(9600);  
   pinMode(LED_BUILTIN, OUTPUT); 
@@ -58,92 +80,55 @@ void setup(){
   pinMode(analogInputCorrentePainel,INPUT);
   pinMode(analogInputTensaoBatLition,INPUT);
   
+  wificonecte = ConectarWifi();
   if(!SD.begin(5)){
     Serial.println("Card Mount Failed");
     return;
+  }else{
+    Serial.println("Card Pronto para uso :)");
   }
-  
-}
-
-void loop(){
-  /*
-    if(ConectarWifi()){
-        ntp.begin();
-        //GMT em segundos
-        // +1 = 3600
-        // +8 = 28800
-        // -1 = -3600
-        // -3 = -10800 (BRASIL)
-        ntp.setTimeOffset(-10800);
-     
-        if (ntp.update()) {
-            Serial.print("DATA/HORA: ");
-            //Serial.println(ntp.getFormattedDate());
-
-            Serial.print("HORARIO: ");
-            Serial.println(ntp.getFormattedTime());
-
-            Serial.print("HORA: ");
-            Serial.println(ntp.getHours());
-
-            Serial.print("MINUTOS: ");
-            Serial.println(ntp.getMinutes());
-
-            Serial.print("SEGUNDOS: ");
-            Serial.println(ntp.getSeconds());
-
-            Serial.print("DIA DA SEMANA (0=domingo): ");
-            Serial.println(ntp.getDay());
-
-            Serial.println();
-
-        } else {
-            Serial.println("!Erro ao atualizar NTP!\n");
-        }
-        delay(10000);
-    }
-     **/
-    char InputCorrentePainel[WORD_LENGTH];
-    sprintf(InputCorrentePainel, "%.2f", calcularCorrenteEsp32(analogInputCorrentePainel));
-    Serial.println(InputCorrentePainel);
-    char InputTensaoBateria[WORD_LENGTH];
-    sprintf(InputTensaoBateria, "%.2f", Calcula_Tensao(analogRead(analogInputTensaoBateria)));
-    Serial.println(InputTensaoBateria);
-    char TensaoPainel[WORD_LENGTH];
-    sprintf(TensaoPainel, "%.2f", Calcula_Tensao(analogRead(analogInputTensaoPainel)));
-    Serial.println(TensaoPainel);
-    char TensaoBatLition[WORD_LENGTH];    
-    sprintf(TensaoBatLition, "%.2f", Calcula_Tensao(analogRead(analogInputTensaoBatLition)));
-    Serial.println(TensaoBatLition);    
-    delay(1000);
     
-    /*Serial.println(InputCorrentePainel);
-    Serial.print("InputTensaoBateria::%s",InputTensaoBateria);
-    Serial.print("TensaoPainel::%s",TensaoPainel);*/
-
-    /*
-    calcularCorrenteEsp32(analogInputCorrentePainel);
-    Serial.println("Tensao::");
-    Serial.println(Calcula_Tensao(analogRead(analogInputTensao)));
-    Serial.println("Temperatura::");
-    Serial.println(Calcula_Temperatura(analogInputTemperatura));
-    */
-
-    /*
-    if (SD.begin()) { 
-        myFile = SD.open("dadosSolar.txt", FILE_WRITE); // Cria / Abre arquivo .txt
-        if (myFile) { // Se o Arquivo abrir imprime:
-            Serial.println("/TensaoBateria: "+a+"/TensaoPainel: "+b+"/TensaoBatLition: "+c+"/Calcula_corrente: "+d+"/Calcula_Temperatura: "+e+"/");
-            myFile.println("/TensaoBateria: "+a+"/TensaoPainel: "+b+"/TensaoBatLition: "+c+"/Calcula_corrente: "+d+"/Calcula_Temperatura: "+e+"/"); 
-            myFile.close(); 
-        }else {     
-            Serial.println("Erro cartao");
-        } 
-        myFile.close(); 
-    }*/ 
 }
 
-//Testado
+void loop()
+{  
+    String datahoraDados;
+    if(wificonecte)
+    {
+      ntp.begin(); //GMT em segundos // +1 = 3600 // +8 = 28800// -1 = -3600// -3 = -10800 (BRASIL)
+      ntp.setTimeOffset(-10800);     
+      if (ntp.update()) {
+          //char * nome_arquivo = strtok((char *)ntp.getFormattedDate(),"T");
+          //String nomeArquivo = "/dadossolar"+(String)[0]+".txt";
+          if((ntp.getMinutes()%10) == 0)
+          {
+            datahoraDados = ntp.getFormattedDate();
+            datahoraDados = datahoraDados +"-Temperatura="+(String)Calcula_Temperatura(analogInputTemperatura);
+            datahoraDados = datahoraDados +"/Corrente="+(String)calcularCorrenteEsp32(analogInputCorrentePainel);
+            datahoraDados = datahoraDados +"/Tensao01="+(String)Calcula_Tensao(analogRead(analogInputTensaoBateria));
+            datahoraDados = datahoraDados +"/Tensao02="+(String)Calcula_Tensao(analogRead(analogInputTensaoPainel));
+            datahoraDados = datahoraDados +"/Tensao03="+(String)Calcula_Tensao(analogRead(analogInputTensaoBatLition));
+            datahoraDados = datahoraDados +"/Tensao04="+(String)Calcula_Tensao(analogRead(analogInputTensao))+"\n";
+            if (SD.begin()) { 
+              appendFile(SD, "/dados2728092023.txt", datahoraDados);  
+              arquivo_read = false;             
+            }
+          } 
+        }else{
+          return;
+        } 
+    }
+    if (Serial.available() > 0 && arquivo_read == false){
+      if (Serial.read() == 116){
+        readFile(SD, "/dados2627092023.txt");
+        Serial.println("Acabou");
+        arquivo_read = true;        
+      }      
+    }
+    
+}
+ 
+//Testado e calibrado
 float Calcula_Tensao(int leituraAnalogica)
 {
     const float vcc = 3.30; // Tensão de referência da ESP32 em Volts
@@ -162,11 +147,9 @@ float Calcula_Tensao(int leituraAnalogica)
 
 //Testa
 float Calcula_Temperatura(int pino_input_temperatura)
-{
-    // Parâmetros do termistor    
-    const double vcc = 3.3;
+{    
+    const double vcc = 3.30;
     const int resolucaoADC = 4096;
-    // Parâmetros do circuito
     const double R = 10000.0;
     const double beta = 3600.0;
     const double r0 = 10000.0;
@@ -189,8 +172,8 @@ float Calcula_Temperatura(int pino_input_temperatura)
     return ReturnT;
 }
 
-float calcularCorrenteEsp32(int pino_sensor){
-  int menor_valor;
+float calcularCorrenteEsp32(int pino_sensor)
+{
   int valor_lido;
   int menor_valor_acumulado = 0;
   int ZERO_SENSOR = 0;
@@ -198,9 +181,8 @@ float calcularCorrenteEsp32(int pino_sensor){
   float corrente_eficaz;
   double maior_valor=0;
   double corrente_valor=0;
-  
-  menor_valor = 4095;
-  
+  int menor_valor = 4095;
+
   for(int i = 0; i < 10000 ; i++){
     valor_lido = analogRead(pino_sensor);
     if(valor_lido < menor_valor){
@@ -212,7 +194,6 @@ float calcularCorrenteEsp32(int pino_sensor){
   
   delay(3000);
 
-  //Zerar valores
   menor_valor = 4095;
  
   for(int i = 0; i < 1600 ; i++){
@@ -231,9 +212,5 @@ float calcularCorrenteEsp32(int pino_sensor){
  
   //Converter para corrente eficaz  
   corrente_eficaz = corrente_pico/1.4;
-  /*Serial.print("Corrente Eficaz:");
-  Serial.print(corrente_eficaz);
-  Serial.print(corrente_eficaz*1000);
-  Serial.println(" mA");*/
   return corrente_eficaz;
 }
