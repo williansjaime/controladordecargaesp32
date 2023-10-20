@@ -30,21 +30,25 @@ def ArduinoRead():
         
         # comport.write(PARAM_CARACTER)
         comport.write(b't')
+        minuto = datetime.today()
         while True:
             VALUE_SERIAL = comport.readline()
             if not VALUE_SERIAL:
                 break  # Exit the loop when no more data is received
             print('\nRetorno da serial: %s' % (VALUE_SERIAL))
+            with open('DadosColetroSolar'+str(minuto)+'.csv', 'a') as f_object:
+                w = csv.writer(f_object)
+                w.writerow([str(VALUE_SERIAL.strip())])
             if "Acabou" in str(VALUE_SERIAL):
                 print("Entrou no if")
                 break
         print("Saiu do while")
         comport.close()
-        minuto = datetime.today()
+        
 
-        with open('DadosColetroSolar.csv', 'a') as f_object:
-            w = csv.writer(f_object)
-            w.writerow([minuto, str(VALUE_SERIAL.strip())])  # Write time and serial data to CSV
+        #with open('DadosColetroSolar29092023.csv', 'a') as f_object:
+            #w = csv.writer(f_object)
+            #w.writerow([minuto, str(VALUE_SERIAL.strip())])  # Write time and serial data to CSV
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -55,8 +59,7 @@ if __name__ == "__main__":
         ArduinoRead()
 
 
-def USBDataRead():
-    
+def USBDataRead():    
     arduino = serial.Serial('/dev/ttyUSB0', 9600)
     arduino.write(b't')
     #arduino.write('l'.encode())
