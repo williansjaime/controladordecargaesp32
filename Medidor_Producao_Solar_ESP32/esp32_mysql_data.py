@@ -1,12 +1,10 @@
-import sys
-import serial
-#import mysql.connector
-import time
-from datetime import datetime   
+  
 import csv
-
-#https://blog.eletrogate.com/como-conectar-o-arduino-com-o-python/
-
+import sys
+import time
+import serial
+import mysql.connector
+from datetime import datetime 
 
 def USBDataConnect():
     while True:
@@ -53,11 +51,6 @@ def ArduinoRead():
     except Exception as e:
         print(f"An error occurred: {e}")
 
-if __name__ == "__main__":
-    minuto = datetime.today().minute
-    if(minuto % 1) == 0:
-        ArduinoRead()
-
 
 def USBDataRead():    
     arduino = serial.Serial('/dev/ttyUSB0', 9600)
@@ -96,8 +89,25 @@ def USBDataRead():
     #variaveis = (TensaoPainel,TensaoBateriaChub,TensaoBateriaLit,CorrentePainel,DateTimeNow,TemperaturaBat)
     #return variaveis"""
   
+
+def ConnectBanco():
+    mydb = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="100415",
+    database="DadosSistemaSolar"
+    )
+
+    mycursor = mydb.cursor()
+    mycursor.execute("SELECT * FROM DadosSistemaSolar.tbDadosEsp32Solar")
+
+    myresult = mycursor.fetchall()
+
+    for x in myresult:
+        print(x)
+
 def main():
-    USBDataRead()
+    ConnectBanco()
     #InsertDataBase(USBDataRead())
     #serial.Serial('/dev/ttyUSB0')
     #texto = str(serial.readline())
@@ -111,6 +121,10 @@ def main():
     #USBDataRead() 
     #if(minuto==6):USBDataRead() 
     
-    
+if __name__ == "__main__":
+    minuto = datetime.today().minute
+    if(minuto % 1) == 0:
+        ConnectBanco()
+   
      
     
