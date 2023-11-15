@@ -3,8 +3,83 @@ import csv
 import sys
 import time
 import serial
+import traceback
 import mysql.connector
 from datetime import datetime 
+
+class MqttDados():
+
+    def __init__(self,DataHora, Temperatura, Corrente, Watt,tensaoPainel,tensaoBatChumbo,tensaoBatLition,tensaoSistema):
+        self.Temperatura = Temperatura
+        self.Corrente = Corrente
+        self.DataHora = DataHora.replace("Z","")
+        self.Watt = Watt
+        self.tensaoPainel = tensaoPainel
+        self.tensaoBatChumbo = tensaoBatChumbo
+        self.tensaoBatLition = tensaoBatLition
+        self.tensaoSistema = tensaoSistema
+    
+    def InsertDadaBase(self):
+        try:
+            SQLServe = DB_Mysql()
+            sqlserver = SQLServe.cursor()
+            insert_dados_solar  = ("""
+                INSERT INTO DadosSistemaSolar.tbDadosEsp32Solar(
+                    datahora, 
+                    temperatura, 
+                    corrente, 
+                    wattHora, 
+                    tensaoPainel, 
+                    tensaoBatChumbo, 
+                    tensaoBatLition, 
+                    tensaoSistema 
+                    )
+                VALUES
+                    (
+                    '{}'
+                    ,{}
+                    ,{}
+                    ,{}
+                    ,{}
+                    ,{}
+                    ,{}
+                    ,{}) 
+                """).format(
+                    self.DataHora,
+                    self.Temperatura,
+                    self.Corrente,
+                    self.Watt,
+                    self.tensaoPainel,
+                    self.tensaoBatChumbo,
+                    self.tensaoBatLition,
+                    self.tensaoSistema                                                                                    
+                )
+            sqlserver.execute(insert_dados_solar)
+            SQLServe.commit()            
+            SQLServe.close()    
+            print("Salvo com sucesso!!!\n")
+        except Exception as err:
+            traceback.print_exc()
+
+
+
+def DB_Mysql():
+    Mysql = None
+    try:
+        hosts = "localhost"
+        username= "root"
+        password= "12345"
+        database= "DadosSistemaSolar"
+        Mysql = mysql.connector.connect(
+            host=hosts,
+            user=username,
+            password=password,
+            database=database)
+        return Mysql        
+    except Exception as err:
+        LogFile.logFile(err)
+
+   
 
 def USBDataConnect():
     while True:
@@ -14,6 +89,7 @@ def USBDataConnect():
             break
         except:
             pass
+
 def ArduinoRead():
     try:
         # Iniciando conexao serial
@@ -52,7 +128,7 @@ def ArduinoRead():
         print(f"An error occurred: {e}")
 
 
-def USBDataRead():    
+def USBDataRead(self):    
     arduino = serial.Serial('/dev/ttyUSB0', 9600)
     arduino.write(b't')
     #arduino.write('l'.encode())
@@ -78,53 +154,3 @@ def USBDataRead():
         w = csv.writer(f_object)
         w.writerow(splitvariavel)    
     #w.close() 
-
-          
-    #TensaoPainel = "0.00"
-    #TensaoBateriaChub = "0.00"
-    #TensaoBateriaLit = "0.00"
-    #CorrentePainel = "0.00"
-    #DateTimeNow = datetime.datetime.now()
-    #TemperaturaBat = "00.0"
-    #variaveis = (TensaoPainel,TensaoBateriaChub,TensaoBateriaLit,CorrentePainel,DateTimeNow,TemperaturaBat)
-    #return variaveis"""
-  
-
-def ConnectBanco():
-    mydb = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="100415",
-    database="DadosSistemaSolar"
-    )
-
-    mycursor = mydb.cursor()
-    mycursor.execute("SELECT * FROM DadosSistemaSolar.tbDadosEsp32Solar")
-
-    myresult = mycursor.fetchall()
-
-    for x in myresult:
-        print(x)
-
-def main():
-    ConnectBanco()
-    #InsertDataBase(USBDataRead())
-    #serial.Serial('/dev/ttyUSB0')
-    #texto = str(serial.readline())
-    #print(texto[2:-5])
-
-#while True:# __name__ == "__main__":
-    #minuto = datetime.today().minute
-    #print("Rodando while")
-    #if(minuto%1)==0:ArduinoRead()
-    #ArduinoRead()
-    #USBDataRead() 
-    #if(minuto==6):USBDataRead() 
-    
-if __name__ == "__main__":
-    minuto = datetime.today().minute
-    if(minuto % 1) == 0:
-        ConnectBanco()
-   
-     
-    

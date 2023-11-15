@@ -13,20 +13,22 @@ PubSubClient client(espClient);
 WiFiUDP ntpUDP;
 NTPClient ntp(ntpUDP);
 
-const char *ssid = "redewifi";
+const char *ssid = "nomewifi";
 const char *password = "senhawifi";
 const char* mqtt_server = "ipmaquina";
-const int mqtt_port = 1883; // Porta padrão MQTT
-const char* mqtt_user = "tht";
-const char* mqtt_password = "senha";
+const int mqtt_port = 1883; 
+const char* mqtt_user = "ESP32SOLAR";
+const char* mqtt_password = "senhatopico";
 
+String datahoraDados= "";
+String nomeArquivo = "";
 
 int LED_BUILTIN = 23;
 int releVentoinha = 12;
 
-int analogPinTensao = 35;
+int analogPinTensao = 36;
 int analogPinTensaoPainel = 39;
-int analogPinTensaoBateria = 36;
+int analogPinTensaoBateria = 35;
 int analogPinTensaoBatLition = 34;
 
 //Sensor de temperatura
@@ -36,7 +38,10 @@ int analogPinCorrentePainel = 33;
 const double bateriaGrandeFlut = 14.4;
 const double batLitio = 14.4;
 
-bool wificonecte = false;
+bool wifi_status = false;
+bool sd_status = false;
+bool mqtt_status = false;
+bool date_atualizado = false;
 bool arquivo_read = false;
 
 int mVperAmp = 100;           // this the 5A version of the ACS712 -use 100 for 20A Module and 66 for 30A Module
@@ -44,6 +49,7 @@ int Watt = 0;
 double Voltage = 0;
 double VRMS = 0;
 double AmpsRMS = 0;
+double tensaoPainel = 0;
 
 double Calcula_corrente();
 float Calcula_Tensao(int valor);
@@ -58,9 +64,61 @@ void appendFile(fs::FS &fs, String path, String message);
 
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  // Manipule as mensagens recebidas aqui
+  Serial.print("Mensagem recebida no tópico: ");
+  Serial.print(topic);
+  Serial.print(". Conteúdo: ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
 }
 
+bool setDataTimeESP32(){
+  ntp.begin();
+  ntp.setTimeOffset(-10800);     
+  if (ntp.update()) {
+      String str = ntp.getFormattedDate();
+      for(int i = 0; i<10;i++){nomeArquivo +=str[i];}
+      nomeArquivo = "";
+      nomeArquivo = "/dadossolar"+nomeArquivo+".txt";
+      return true;
+  }
+  return false;
+}
+
+void realizarLeiturasSistema(){
+  AmpsRMS = Calcula_corrente(analogPinCorrentePainel)/100;
+  tensaoPainel = Calcula_Tensao(analogRead(analogPinTensaoPainel));
+  if(AmpsRMS>0 && AmpsRMS > 0.06 && wifi_status && date_atualizado){ // 
+    Watt = (AmpsRMS*tensaoPainel/1.2);    
+    if((ntp.getMinutes()%5) == 0)
+    {
+      datahoraDados= "";
+      datahoraDados = ntp.getFormattedDate();
+      datahoraDados = "{\'DataHora\':\'"+(String)datahoraDados +"\',\'Temperatura\':"+(String)Calcula_Temperatura(analogPinTemperatura);
+      datahoraDados = datahoraDados +",\'Corrente\':"+(String)AmpsRMS;
+      datahoraDados = datahoraDados +",\'Watt\':"+(String)Watt;
+      datahoraDados = datahoraDados +",\'tensaoPainel\':"+(String)Calcula_Tensao(analogRead(analogPinTensaoPainel));
+      datahoraDados = datahoraDados +",\'tensaoBatChumbo\':"+(String)Calcula_Tensao(analogRead(analogPinTensaoBateria));
+      datahoraDados = datahoraDados +",\'tensaoBatLition\':"+(String)Calcula_Tensao(analogRead(analogPinTensaoBatLition));
+      datahoraDados = datahoraDados +",\'tensaoSistema\':"+(String)Calcula_Tensao(analogRead(analogPinTensao))+"}\n";
+      if (!client.connected()) {
+        reconnect();
+        mqtt_status =true;
+      }
+      if(mqtt_status) client.publish("/teste", datahoraDados.c_str());
+      
+      if (sd_status) { 
+        appendFile(SD, nomeArquivo, datahoraDados);  
+        arquivo_read = false;             
+      }
+    }
+  }else{
+    wifi_status = ConectarWifi();
+    sd_status = SD.begin(5);
+    date_atualizado = setDataTimeESP32();
+  }
+}
 
 void setup() {
   Serial.begin(9600);
@@ -72,85 +130,28 @@ void setup() {
   pinMode(analogPinCorrentePainel,INPUT);
   pinMode(analogPinTensaoBatLition,INPUT);
   
-  wificonecte = ConectarWifi();
-  
-  if(wificonecte)
-  {
-    Serial.println("Wifi ok");
-  }else{
-    Serial.println("Wifi erro ao conectar");
-  }
-  if(!SD.begin(5)){
-    Serial.println("Card Mount Failed");
-    return;
-  }else{
-    Serial.println("Card Pronto para uso :)");
-  }
-  
+  wifi_status = ConectarWifi();
+  sd_status = SD.begin(5);
+  date_atualizado = setDataTimeESP32();
+    
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
-
-  if (client.connect("ESP32Client", mqtt_user, mqtt_password)) {
-    Serial.println("Conectado ao servidor MQTT");
-  } else {
-    Serial.print("Falha na conexão ao servidor MQTT, rc=");
-    Serial.println(client.state());
+  mqtt_status = client.connect("ESP32Client", mqtt_user, mqtt_password);
+  if(!client.connect("ESP32Client", mqtt_user, mqtt_password)){
+    Serial.println("Erro ao conectar ao mqtt");
+    //ESP.restart();
   }
+  
+  if(wifi_status)Serial.println("Wifi ok!!");
+  if(mqtt_status)Serial.println("mqtt ok!!");
+  if(date_atualizado)Serial.println("DataHora ok!!");
+
+  
 }
 
-
 void loop() {
-    
-  AmpsRMS = Calcula_corrente(analogPinCorrentePainel)/100;
-  //if(AmpsRMS>0 && AmpsRMS > 0.06){
-    Watt = (AmpsRMS*Calcula_Tensao(analogRead(analogPinTensao))/1.2);
-    String datahoraDados;
-    String nomeArquivo = "";
-    if(wificonecte)
-    {
-      ntp.begin(); //GMT em segundos // +1 = 3600 // +8 = 28800// -1 = -3600// -3 = -10800 (BRASIL)
-      ntp.setTimeOffset(-10800);     
-      if (ntp.update()) {
-          String str = ntp.getFormattedDate();
-          for(int i = 0; i<10;i++){nomeArquivo +=str[i];}
-          nomeArquivo = "/dadossolar"+nomeArquivo+".txt";
-          if((ntp.getMinutes()%10) == 0)
-          {
-            datahoraDados = ntp.getFormattedDate();
-            datahoraDados = datahoraDados +"-Temperatura="+(String)Calcula_Temperatura(analogPinTemperatura);
-            datahoraDados = datahoraDados +"/Corrente="+(String)AmpsRMS;
-            datahoraDados = datahoraDados +"/Watt="+(String)Watt;
-            datahoraDados = datahoraDados +"/Tensao01="+(String)Calcula_Tensao(analogRead(analogPinTensaoBateria));
-            datahoraDados = datahoraDados +"/Tensao02="+(String)Calcula_Tensao(analogRead(analogPinTensaoPainel));
-            datahoraDados = datahoraDados +"/Tensao03="+(String)Calcula_Tensao(analogRead(analogPinTensaoBatLition));
-            datahoraDados = datahoraDados +"/Tensao04="+(String)Calcula_Tensao(analogRead(analogPinTensao))+"\n";
-            Serial.println(datahoraDados);
-            if (!client.connected()) {
-              reconnect();
-            }
-
-            if(client.publish("/teste", datahoraDados.c_str())){
-              Serial.println("Escrita com sucesso - MQTT");
-            };
-            if (SD.begin()) { 
-              appendFile(SD, nomeArquivo, datahoraDados);  
-              arquivo_read = false;             
-            }
-          }
-        }else{
-          Serial.println("erro");
-        } 
-    }else{
-          Serial.println("erro no wifi");
-        }
-    /*if (Serial.available() > 0 && arquivo_read == false){
-      if (Serial.read() == 116){
-        readFile(SD, nomeArquivo);
-        Serial.println("Acabou");
-        arquivo_read = true;        
-      }      
-    }*/
-  //}
+  //client.setCallback(callback);
+  realizarLeiturasSistema();    
   delay(5000); 
 }
 
@@ -159,7 +160,7 @@ void reconnect() {
     Serial.print("Conectando ao servidor MQTT...");
     if (client.connect("ESP32Client", mqtt_user, mqtt_password)) {
       Serial.println("Conectado!");
-      client.subscribe("seu/topico"); // Subscreva aos tópicos MQTT desejados aqui
+      client.subscribe("/teste");
     } else {
       Serial.print("Falha, rc=");
       Serial.print(client.state());
@@ -168,8 +169,6 @@ void reconnect() {
     }
   }
 }
-
-
 
 bool ConectarWifi(){
     WiFi.begin(ssid, password);
@@ -185,13 +184,14 @@ void appendFile(fs::FS &fs, String path, String message)
   File file = fs.open(path, FILE_APPEND);
   if(!file)
   {
+    file.close();
     return;
   }
   if(file.print(message)){
-    Serial.println("mensagem escrita com sucesso");
+    file.close();
     return;
   } 
-  file.close();
+  
 }
 
 void readFile(fs::FS &fs, String path)
@@ -207,7 +207,6 @@ void readFile(fs::FS &fs, String path)
 }
 
 
-//Testado e calibrado
 float Calcula_Tensao(int leituraAnalogica)
 {
     const float vcc = 3.30; // Tensão de referência da ESP32 em Volts
